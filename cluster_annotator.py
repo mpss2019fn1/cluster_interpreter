@@ -73,9 +73,8 @@ class ClusterAnnotator(threading.Thread):
             relations_characteristic_count[relation] = {k: v for (k, v) in relations[relation].items() if
                                                         v >= 0.1 * relations_count[relation]}
         print(f"\n== TOP RELATIONS FOR #{cluster.id} {cluster.name} ==")
-        for relation_count in relations_count.most_common(10):
-            relation_label = relation_count[0]
-            print(f"{relation_label}: {relation_count[1]}")
+        for relation_label in {k: v for (k, v) in relations_count.items() if v >= 0.5 * len(cluster.entities)}:
+            print(f"{relation_label}: {relations_count[relation_label]}")
             for characteristic in relations_characteristic_count[relation_label]:
                 print(f"\t => {characteristic}: {relations_characteristic_count[relation_label][characteristic]}")
 
