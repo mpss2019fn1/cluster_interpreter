@@ -7,7 +7,7 @@ class Entity:
 
     def __init__(self, name):
         self.name = name
-        self.wikipedia_page_id = name.split("_")[-1]
+        self.wikipedia_page_id = int(name.split("_")[-1])
         self.wikidata_id = None
 
 
@@ -31,7 +31,7 @@ class Cluster:
                     cluster_queue.put(last_cluster)
                     cluster_id += 1
                     continue
-                last_cluster.entities.append(Entity(line))
+                last_cluster.entities.append(Entity(line[:-1]))
 
         return cluster_queue
 
@@ -46,17 +46,23 @@ class Cluster:
         db_cursor = mysql_connection.cursor()
         entity_ids_list = ",".join([str(x.wikipedia_page_id) for x in self.entities])
         db_cursor.execute(f"SELECT pp_page, pp_value "
-                                   f"FROM page_props "
-                                   f"WHERE pp_propname = 'wikibase_item' "
-                                   f"AND pp_page IN ({entity_ids_list});")
-        records = db_cursor.fetch_all()
+                          f"FROM page_props "
+                          f"WHERE pp_propname LIKE 'wikibase_item' "
+                          f"AND pp_page IN ({entity_ids_list});")
+        mapping = {}
+        for record in db_cursor:
+            if not record[1]:
+                print(record[0])
+                continue
+
+            mapping[record[0]] = record[1]
+
         db_cursor.close()
 
-        wikipedia_to_wikidata_key_mapping = {}
-        for record in records:
-            wikipedia_to_wikidata_key_mapping[record[0]] = record[1]
-
         for entity in self.entities:
-            entity.wikidata_id = wikipedia_to_wikidata_key_mapping[entity.wikipedia_page_id]
+            if entity.wikipedia_page_id not in mapping:
+                # entity is not present in wikidata
+                self.entities.remove(entity)
+                continue
 
-
+            entity.wikidata_id = mapping[entity.wikipedia_page_id]

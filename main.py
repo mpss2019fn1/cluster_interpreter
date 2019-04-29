@@ -4,7 +4,7 @@ import queue
 
 from cluster import Cluster
 from cluster_annotator import ClusterAnnotator
-from util.filesystem_validators import AccessibleDirectory
+from util.filesystem_validators import AccessibleDirectory, AccessibleTextFile
 
 thread_pool = []
 working_queue = queue.Queue()
@@ -27,18 +27,18 @@ def main():
 def _initialize_parser():
     general_parser = argparse.ArgumentParser(
         description='Enrich clusters with further information by utilizing external sources')
-    general_parser.add_argument("--input", help='File containing clustered entities', action=AccessibleDirectory,
+    general_parser.add_argument("--input", help='File containing clustered entities', action=AccessibleTextFile,
                                 required=True)
     general_parser.add_argument("--output", help='Desired location for enriched clusters', action=AccessibleDirectory,
                                 required=True)
-    general_parser.add_argument("--workers", help='Number of workers to start in parallel', action=AccessibleDirectory,
-                                required=True, default=16)
+    general_parser.add_argument("--workers", help='Number of workers to start in parallel', type=int,
+                                required=False, default=16)
     return general_parser
 
 
 def _initialize_threads(number_of_workers):
     for x in range(number_of_workers):
-        _thread = ClusterAnnotator(x, working_queue.get)
+        _thread = ClusterAnnotator(x, working_queue)
         _thread.start()
         thread_pool.append(_thread)
 
