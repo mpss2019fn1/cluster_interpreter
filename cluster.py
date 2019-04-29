@@ -27,7 +27,7 @@ class Cluster:
         with input_file.open() as file:
             for line in file:
                 if line.startswith(constant.CLUSTER_HEADLINE):
-                    last_cluster = Cluster._create_cluster(cluster_id, line)
+                    last_cluster = Cluster._create_cluster(cluster_id, line.replace("\n", ""))
                     cluster_queue.put(last_cluster)
                     cluster_id += 1
                     continue

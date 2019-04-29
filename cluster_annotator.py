@@ -66,9 +66,18 @@ class ClusterAnnotator(threading.Thread):
 
     @staticmethod
     def _print_relations(cluster, relations):
-        relations_count = {}
+        relations_count = collections.Counter()
+        relations_characteristic_count = {}
         for relation in relations:
-            relations_count[relation] = relations[relation].most_common(3)
+            relations_count[relation] = sum(relations[relation].values())
+            relations_characteristic_count[relation] = {k: v for (k, v) in relations[relation].items() if
+                                                        v >= 0.1 * relations_count[relation]}
+        print(f"\n== TOP RELATIONS FOR #{cluster.id} {cluster.name} ==")
+        for relation_count in relations_count.most_common(10):
+            relation_label = relation_count[0]
+            print(f"{relation_label}: {relation_count[1]}")
+            for characteristic in relations_characteristic_count[relation_label]:
+                print(f"\t => {characteristic}: {relations_characteristic_count[relation_label][characteristic]}")
 
-        top_results_printed = "\t".join([f"{relations_count[relation]} - {relation}\n" for relation in relations_count])
-        print(f"TOP RESULTS FOR #{cluster.id} {cluster.name}:\n{top_results_printed}")
+
+
