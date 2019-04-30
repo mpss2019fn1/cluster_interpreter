@@ -1,4 +1,3 @@
-import collections
 import threading
 from collections import Counter
 import queue
@@ -7,6 +6,54 @@ import requests
 
 from resources import constant
 from sparql_endpoint import SparqlEndpoint
+
+
+class Relation:
+
+    def __init__(self, source, name, value):
+        self.source = source
+        self.name = name
+        self.value = value
+
+    @staticmethod
+    def from_wikidata_record(record):
+        return Relation(record["person"], record["wdLabel"], record["ps_Label"])
+
+
+class RelationMetrics:
+
+    def __init__(self, number_of_entities):
+        self._unique_relation_participants = {}
+        self._value_per_relation = {}
+        self._unique_relations_counter = Counter()
+        self._number_of_entities = number_of_entities
+
+    def add_relation(self, relation):
+        if relation.name not in self._unique_relation_participants:
+            self._unique_relation_participants[relation.name] = set()
+            self._value_per_relation[relation.name] = Counter()
+        if relation.source not in self._unique_relation_participants[relation.name]:
+            self._unique_relations_counter[relation.name] += 1
+            self._unique_relation_participants[relation.name].add(relation.source)
+        self._value_per_relation[relation.name][relation.value] += 1
+
+    def top_relations(self, max_relations, min_occurrence_factor=0.3):
+        return list(filter(lambda x: x[1] > self._number_of_entities * min_occurrence_factor,
+                           self._unique_relations_counter.most_common(max_relations)))
+
+    def top_values(self, relation_name, max_values, min_occurrence_factor=0.1):
+        return list(filter(lambda x: x[1] > self._number_of_entities * min_occurrence_factor,
+                           self._value_per_relation[relation_name].most_common(max_values)))
+
+    def __str__(self):
+        representation = []
+        for relation, relation_count in self.top_relations(constant.MAX_NUMBER_OF_RELATIONS_PER_CLUSTER):
+            relation_percentage = round(relation_count / self._number_of_entities * 100, 2)
+            representation.append(f"Relation: {relation} {relation_percentage}%")
+            for value, value_count in self.top_values(relation, constant.MAX_NUMBER_OF_VALUES_PER_RELATION):
+                value_percentage = round(value_count / self._number_of_entities * 100, 2)
+                representation.append("\t↳ {:5.2f}% {}".format(value_percentage, value))
+        return "\n".join(representation)
 
 
 class ClusterAnnotator(threading.Thread):
@@ -36,47 +83,30 @@ class ClusterAnnotator(threading.Thread):
             return False
 
     def _analyze_entities(self, cluster):
-        chunk_size = 200
+        chunk_size = constant.STANDARD_CHUNK_SIZE
         index = 0
-        relations = {}
+        metrics = RelationMetrics(len(cluster.entities))
 
         while index < len(cluster.entities):
             chunk = cluster.entities[index:index + chunk_size]
-            query = constant.named_entity_relations_sparql_query([f"wd:{x.wikidata_id}" for x in chunk])
+            query = constant.named_entity_relations_sparql_query(chunk)
 
             try:
-                records = self._sparql_endpoint.query(query)
-                ClusterAnnotator._count_relations(records, relations)
+                relations = [Relation.from_wikidata_record(record) for record in self._sparql_endpoint.query(query)]
+                ClusterAnnotator._count_relations(relations, metrics)
                 index += len(chunk)
 
             except requests.exceptions.Timeout:
                 chunk_size //= 2
                 pass
-        ClusterAnnotator._print_relations(cluster, relations)
+        ClusterAnnotator._print_relations(cluster, metrics)
 
     @staticmethod
-    def _count_relations(records, relations):
-        for record in records:
-            relation = record["wdLabel"]
-            target = record["ps_Label"]
-            if relation not in relations:
-                relations[relation] = collections.Counter()
-
-            relations[relation][target] += 1
-
-    @staticmethod
-    def _print_relations(cluster, relations):
-        relations_count = collections.Counter()
-        relations_characteristic_count = {}
+    def _count_relations(relations, metrics):
         for relation in relations:
-            relations_count[relation] = sum(relations[relation].values())
-            relations_characteristic_count[relation] = {k: v for (k, v) in relations[relation].items() if
-                                                        v >= 0.1 * relations_count[relation]}
+            metrics.add_relation(relation)
+
+    @staticmethod
+    def _print_relations(cluster, cluster_metrics):
         print(f"\n== TOP RELATIONS FOR #{cluster.id} {cluster.name} ==")
-        for relation_label in {k: v for (k, v) in relations_count.items() if v >= 0.5 * len(cluster.entities)}:
-            print(f"{relation_label}: {relations_count[relation_label]}")
-            for characteristic in relations_characteristic_count[relation_label]:
-                print(f"\t => {characteristic}: {relations_characteristic_count[relation_label][characteristic]}")
-
-
-
+        print(cluster_metrics)

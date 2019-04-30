@@ -10,6 +10,12 @@ class Entity:
         self.wikipedia_page_id = int(name.split("_")[-1])
         self.wikidata_id = None
 
+    def __repr__(self):
+        self.__str__()
+
+    def __str__(self):
+        return "wd:" + str(self.wikidata_id)
+
 
 class Cluster:
 
