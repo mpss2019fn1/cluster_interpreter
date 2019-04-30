@@ -1,7 +1,7 @@
 import threading
 from collections import Counter
 import queue
-
+import logging
 import requests
 
 from resources import constant
@@ -76,7 +76,9 @@ class ClusterAnnotator(threading.Thread):
     def _analyze_cluster(self):
         try:
             cluster = self._work_queue.get_nowait()
+            logging.info(f"Start analyzing cluster {cluster.name} on Thread #{self._thread_id}")
             cluster.fetch_wikidata_ids(self._mysql_connection)
+            logging.info(f"Finished fetching wikidata ids from MySQL on Thread #{self._thread_id}")
             self._analyze_entities(cluster)
             return True
         except queue.Empty:
@@ -92,7 +94,11 @@ class ClusterAnnotator(threading.Thread):
             query = constant.named_entity_relations_sparql_query(chunk)
 
             try:
+                logging.info(
+                    f"Executing SPARQL query for batch [{index},{index + len(chunk)}] on Thread #{self._thread_id}")
                 relations = [Relation.from_wikidata_record(record) for record in self._sparql_endpoint.query(query)]
+                logging.info(
+                    f"Finished executing SPARQL query on Thread #{self._thread_id}")
                 ClusterAnnotator._count_relations(relations, metrics)
                 index += len(chunk)
 
@@ -108,5 +114,5 @@ class ClusterAnnotator(threading.Thread):
 
     @staticmethod
     def _print_relations(cluster, cluster_metrics):
-        print(f"\n== TOP RELATIONS FOR #{cluster.id} {cluster.name} ==")
+        print(f"\n== TOP RELATIONS FOR #{cluster.id} {cluster.name} ({len(cluster.entities)} Entities) ==")
         print(cluster_metrics)
