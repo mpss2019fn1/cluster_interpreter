@@ -1,17 +1,19 @@
 import argparse
 import logging
 import queue
+from pathlib import Path
 
 from cluster import Cluster
 from cluster_annotator import ClusterAnnotator
 from util.filesystem_validators import AccessibleDirectory, AccessibleTextFile
+from wikidata_endpoint import WikidataEndpointConfiguration, WikidataEndpoint
 
 thread_pool = []
 working_queue = queue.Queue()
 
 
 def main():
-    logging.basicConfig(format='%(asctime)s : %(levelname)s : %(message)s', level=logging.INFO)
+    logging.basicConfig(format='%(asctime)s : [%(threadName)s] %(levelname)s : %(message)s', level=logging.INFO)
     parser = _initialize_parser()
 
     args = parser.parse_args()
@@ -37,10 +39,16 @@ def _initialize_parser():
 
 
 def _initialize_threads(number_of_workers):
+    endpoint = _create_wikidata_endpoint()
     for x in range(number_of_workers):
-        _thread = ClusterAnnotator(x, working_queue)
+        _thread = ClusterAnnotator(x, working_queue, endpoint)
         _thread.start()
         thread_pool.append(_thread)
+
+
+def _create_wikidata_endpoint():
+    config = WikidataEndpointConfiguration(Path("resources/wikidata_endpoint_config.ini"))
+    return WikidataEndpoint(config)
 
 
 if __name__ == "__main__":
