@@ -2,10 +2,11 @@ import threading
 from collections import Counter
 import queue
 import logging
-import requests
+from pathlib import Path
 
 from resources import constant
-from sparql_endpoint import SparqlEndpoint
+from wikidata_endpoint import WikidataEndpoint
+from wikidata_endpoint import WikidataEndpointConfiguration
 
 
 class Relation:
@@ -67,7 +68,9 @@ class ClusterAnnotator(threading.Thread):
         self._cluster_annotations = {"relations": Counter()}
 
         self._mysql_connection = constant.create_mysql_connection()
-        self._sparql_endpoint = SparqlEndpoint(constant.WIKIDATA_API_URL)
+        self._wikidata_endpoint_config = WikidataEndpointConfiguration(Path("resources/wikidata_endpoint_config.ini"))
+        self._wikidata_endpoint = WikidataEndpoint(self._wikidata_endpoint_config)
+        self._chunk_size = constant.STANDARD_CHUNK_SIZE
 
     def run(self):
         while self._analyze_cluster():
@@ -85,27 +88,32 @@ class ClusterAnnotator(threading.Thread):
             return False
 
     def _analyze_entities(self, cluster):
-        chunk_size = constant.STANDARD_CHUNK_SIZE
         index = 0
         metrics = RelationMetrics(len(cluster.entities))
 
         while index < len(cluster.entities):
-            chunk = cluster.entities[index:index + chunk_size]
+            chunk = cluster.entities[index:index + self._chunk_size]
             query = constant.named_entity_relations_sparql_query(chunk)
 
-            try:
-                logging.info(
-                    f"Executing SPARQL query for batch [{index},{index + len(chunk)}] on Thread #{self._thread_id}")
-                relations = [Relation.from_wikidata_record(record) for record in self._sparql_endpoint.query(query)]
-                logging.info(
-                    f"Finished executing SPARQL query on Thread #{self._thread_id}")
-                ClusterAnnotator._count_relations(relations, metrics)
-                index += len(chunk)
+            logging.info(
+                f"Executing SPARQL query for batch [{index},{index + len(chunk)}] on Thread #{self._thread_id}")
+            with self._wikidata_endpoint.request() as request:
+                relations = [Relation.from_wikidata_record(record) for record in
+                             request.post(query,
+                                          on_timeout=self._on_timeout_wikidata_endpoint,
+                                          on_error=self._on_error_wikidata_endpoint)]
+                index += self._chunk_size if len(relations) > 0 else 0
+            logging.info(
+                f"Finished executing SPARQL query on Thread #{self._thread_id}")
+            ClusterAnnotator._count_relations(relations, metrics)
 
-            except requests.exceptions.Timeout:
-                chunk_size //= 2
-                pass
         ClusterAnnotator._print_relations(cluster, metrics)
+
+    def _on_timeout_wikidata_endpoint(self, request):
+        self._chunk_size = int(self._chunk_size * (3/4))
+
+    def _on_error_wikidata_endpoint(self, request, error):
+        pass
 
     @staticmethod
     def _count_relations(relations, metrics):

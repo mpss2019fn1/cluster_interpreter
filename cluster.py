@@ -1,4 +1,6 @@
 import queue
+import time
+import logging
 from pathlib import Path
 from resources import constant
 
@@ -51,10 +53,15 @@ class Cluster:
     def fetch_wikidata_ids(self, mysql_connection):
         db_cursor = mysql_connection.cursor()
         entity_ids_list = ",".join([str(x.wikipedia_page_id) for x in self.entities])
+        start_time = time.perf_counter()
         db_cursor.execute(f"SELECT pp_page, pp_value "
                           f"FROM page_props "
                           f"WHERE pp_propname LIKE 'wikibase_item' "
                           f"AND pp_page IN ({entity_ids_list});")
+        end_time = time.perf_counter()
+        logging.info(f"MySQL query execution took {end_time - start_time} seconds for {len(self.entities)} entities")
+
+        start_time = time.perf_counter()
         mapping = {}
         for record in db_cursor:
             if not record[1]:
@@ -72,3 +79,5 @@ class Cluster:
                 continue
 
             entity.wikidata_id = mapping[entity.wikipedia_page_id]
+        end_time = time.perf_counter()
+        logging.info(f"Mapping WikiData ids took {end_time - start_time} seconds for {len(self.entities)} entities")
