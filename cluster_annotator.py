@@ -10,7 +10,7 @@ from resources import constant
 
 class ClusterAnnotator(threading.Thread):
 
-    def __init__(self, thread_id, work_queue, wikidata_endpoint):
+    def __init__(self, thread_id, work_queue, wikidata_endpoint, output_directory):
         threading.Thread.__init__(self)
 
         self._thread_id = thread_id
@@ -21,6 +21,7 @@ class ClusterAnnotator(threading.Thread):
         self._wikidata_endpoint = wikidata_endpoint
         self._mysql_connection = constant.create_mysql_connection()
         self._chunk_size = constant.STANDARD_CHUNK_SIZE
+        self._output_directory = output_directory
 
     def run(self):
         while self._analyze_cluster():
@@ -104,7 +105,8 @@ class ClusterAnnotator(threading.Thread):
         for relation in relations:
             metrics.add_relation(relation)
 
-    @staticmethod
-    def _print_relations(cluster, cluster_metrics):
-        print(f"\n== TOP RELATIONS FOR #{cluster.id} {cluster.name} ({len(cluster.entities)} Entities) ==")
-        print(cluster_metrics)
+    def _print_relations(self, cluster, cluster_metrics):
+        with open(f"{self._output_directory}/enriched_cluster_{cluster.id}.txt", "w+") as output_file:
+            print(f"\n== TOP RELATIONS FOR #{cluster.id} {cluster.name} ({len(cluster.entities)} Entities) ==",
+                  file=output_file)
+            print(cluster_metrics, file=output_file)

@@ -38,10 +38,10 @@ def _initialize_parser():
     return general_parser
 
 
-def _initialize_threads(number_of_workers):
+def _initialize_threads(number_of_workers, output_directory):
     endpoint = _create_wikidata_endpoint()
     for x in range(number_of_workers):
-        _thread = ClusterAnnotator(x, working_queue, endpoint)
+        _thread = ClusterAnnotator(x, working_queue, endpoint, output_directory)
         _thread.start()
         thread_pool.append(_thread)
 
