@@ -61,7 +61,7 @@ class ClusterAnnotator(threading.Thread):
 
             ClusterAnnotator._count_relations(relations, metrics)
 
-        ClusterAnnotator._print_relations(cluster, metrics)
+        self._print_relations(cluster, metrics)
 
     def _on_timeout_wikidata_endpoint(self, request):
         self._decrease_chunk_size()
