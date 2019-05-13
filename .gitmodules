@@ -1,3 +1,6 @@
 [submodule "wikidata_endpoint"]
 	path = wikidata_endpoint
 	url = https://github.com/mpss2019fn1/wikidata_endpoint.git
+[submodule "wiki_index"]
+	path = wiki_index
+	url = https://github.com/mpss2019fn1/wiki_index.git

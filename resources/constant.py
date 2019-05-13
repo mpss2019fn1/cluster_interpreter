@@ -5,17 +5,6 @@ MAX_NUMBER_OF_RELATIONS_PER_CLUSTER = 20
 MAX_NUMBER_OF_VALUES_PER_RELATION = 20
 
 
-def create_mysql_connection():
-    import mysql.connector
-    return mysql.connector.connect(
-        host="localhost",
-        user="root",
-        passwd="toor",
-        database="mpss2019",
-        auth_plugin="caching_sha2_password",
-    )
-
-
 def named_entity_relations_sparql_query(wikidata_ids):
     query = """
     SELECT DISTINCT ?person ?wdLabel ?ps_Label WHERE {

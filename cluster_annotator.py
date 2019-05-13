@@ -10,7 +10,7 @@ from resources import constant
 
 class ClusterAnnotator(threading.Thread):
 
-    def __init__(self, thread_id, work_queue, wikidata_endpoint, output_directory):
+    def __init__(self, thread_id, work_queue, wikidata_endpoint, output_directory, wikipedia_wikidata_mapping):
         threading.Thread.__init__(self)
 
         self._thread_id = thread_id
@@ -19,9 +19,9 @@ class ClusterAnnotator(threading.Thread):
         self._cluster_annotations = {"relations": Counter()}
 
         self._wikidata_endpoint = wikidata_endpoint
-        self._mysql_connection = constant.create_mysql_connection()
         self._chunk_size = constant.STANDARD_CHUNK_SIZE
         self._output_directory = output_directory
+        self._wikipedia_wikidata_mapping = wikipedia_wikidata_mapping
 
     def run(self):
         while self._analyze_cluster():
@@ -31,7 +31,7 @@ class ClusterAnnotator(threading.Thread):
         try:
             cluster = self._work_queue.get_nowait()
             logging.info(f"Start analyzing cluster {cluster.name}")
-            cluster.fetch_wikidata_ids(self._mysql_connection)
+            cluster.fetch_wikidata_ids(self._wikipedia_wikidata_mapping)
             logging.info(f"Finished fetching wikidata ids from MySQL")
             self._analyze_entities(cluster)
             return True
