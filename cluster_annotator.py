@@ -3,25 +3,25 @@ import queue
 import threading
 from collections import Counter
 
-from relation import Relation
-from relation_metrics import RelationMetrics
-from resources import constant
+from relation.relation_metrics import RelationMetrics
+from util.utils import measure
 
 
 class ClusterAnnotator(threading.Thread):
 
-    def __init__(self, thread_id, work_queue, wikidata_endpoint, output_directory, wikipedia_wikidata_mapping):
+    def __init__(self, thread_id, work_queue, relation_source, output_directory, wikipedia_wikidata_mapping,
+                 relation_sink):
         threading.Thread.__init__(self)
 
         self._thread_id = thread_id
         self._work_queue = work_queue
 
-        self._cluster_annotations = {"relations": Counter()}
+        self._cluster_annotations = {"relation": Counter()}
 
-        self._wikidata_endpoint = wikidata_endpoint
-        self._chunk_size = constant.STANDARD_CHUNK_SIZE
+        self._relation_source = relation_source
         self._output_directory = output_directory
         self._wikipedia_wikidata_mapping = wikipedia_wikidata_mapping
+        self._relation_sink = relation_sink
 
     def run(self):
         while self._analyze_cluster():
@@ -30,10 +30,12 @@ class ClusterAnnotator(threading.Thread):
     def _analyze_cluster(self):
         try:
             cluster = self._work_queue.get_nowait()
-            logging.info(f"Start analyzing cluster {cluster.name}")
-            cluster.fetch_wikidata_ids(self._wikipedia_wikidata_mapping)
-            logging.info(f"Finished fetching wikidata ids from MySQL")
-            self._analyze_entities(cluster)
+            logging.info(f"Start analyzing cluster #{cluster.id}")
+            measure(f"Fetching wikidata ids for cluster #{cluster.id} ({len(cluster.entities)} entities)",
+                    cluster.fetch_wikidata_ids,
+                    self._wikipedia_wikidata_mapping)
+            measure(f"Analyzing cluster #{cluster.id} ({len(cluster.entities)} entities)", self._analyze_entities,
+                    cluster)
             return True
         except queue.Empty:
             return False
@@ -43,62 +45,20 @@ class ClusterAnnotator(threading.Thread):
         metrics = RelationMetrics(len(cluster.entities))
 
         while index < len(cluster.entities):
-            self._chunk_size = min(len(cluster.entities), ClusterAnnotator._synchronized_chunk_size())
+            self._chunk_size = min(len(cluster.entities), self._relation_source.chunk_size())
             chunk = cluster.entities[index:index + self._chunk_size]
-            query = constant.named_entity_relations_sparql_query(chunk)
 
-            logging.info(f"Executing SPARQL query for batch [{index},{index + len(chunk)}]")
-            with self._wikidata_endpoint.request() as request:
-                relations = [Relation.from_wikidata_record(record) for record in
-                             request.post(query,
-                                          on_timeout=self._on_timeout_wikidata_endpoint,
-                                          on_error=self._on_error_wikidata_endpoint)]
+            logging.info(f"Getting relation for batch [{index},{index + len(chunk)}]")
+            relations = self._relation_source.relations_for(chunk)
 
-                if len(relations) > 0:
-                    # request succeeded
-                    index += len(chunk)
-                    self._increase_chunk_size()
+            if len(relations) > 0:
+                # request succeeded
+                index += len(chunk)
 
             ClusterAnnotator._count_relations(relations, metrics)
+            self._relation_sink.persist(relations)
 
         self._print_relations(cluster, metrics)
-
-    def _on_timeout_wikidata_endpoint(self, request):
-        self._decrease_chunk_size()
-
-    def _on_error_wikidata_endpoint(self, request, error):
-        pass
-
-    def _increase_chunk_size(self):
-        with ClusterAnnotator.__chunk_size_lock:
-            if self._chunk_size < ClusterAnnotator.__chunk_size:
-                # __chunk_size has not fully been utilized
-                return
-
-            ClusterAnnotator.__succeeded_requests += 1
-            if ClusterAnnotator.__succeeded_requests > self._wikidata_endpoint.config().concurrent_requests():
-                ClusterAnnotator.__chunk_size = int(self._chunk_size * 1.25)
-                ClusterAnnotator.__succeeded_requests = 0
-                logging.info(f"Increased chunk size to {ClusterAnnotator.__chunk_size}")
-
-    def _decrease_chunk_size(self):
-        with ClusterAnnotator.__chunk_size_lock:
-            if self._chunk_size > ClusterAnnotator.__chunk_size:
-                # __chunk_size has already been decreased by another thread
-                return
-
-            ClusterAnnotator.__chunk_size = int(self._chunk_size * 0.75)
-            ClusterAnnotator.__succeeded_requests = 0
-            logging.info(f"Decreasing chunk size to {ClusterAnnotator.__chunk_size}")
-
-    __chunk_size_lock = threading.Lock()
-    __chunk_size = constant.STANDARD_CHUNK_SIZE
-    __succeeded_requests = 0
-
-    @staticmethod
-    def _synchronized_chunk_size():
-        with ClusterAnnotator.__chunk_size_lock:
-            return ClusterAnnotator.__chunk_size
 
     @staticmethod
     def _count_relations(relations, metrics):

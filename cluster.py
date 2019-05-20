@@ -1,7 +1,6 @@
 import queue
-import time
-import logging
 from pathlib import Path
+
 from resources import constant
 
 
@@ -51,8 +50,6 @@ class Cluster:
         return cluster
 
     def fetch_wikidata_ids(self, wikipedia_wikidata_mapping):
-        start_time = time.perf_counter()
-
         for entity in self.entities:
             if entity.wikipedia_page_id not in wikipedia_wikidata_mapping:
                 # entity is not present in wikidata
@@ -60,5 +57,3 @@ class Cluster:
                 continue
 
             entity.wikidata_id = wikipedia_wikidata_mapping.wikidata_id(entity.wikipedia_page_id)
-        end_time = time.perf_counter()
-        logging.info(f"Mapping WikiData ids took {end_time - start_time} seconds for {len(self.entities)} entities")
