@@ -1,7 +1,7 @@
 import sys
 
-from relation_source.abstract_relation_source import AbstractRelationSource
-from relation import Relation
+from RelationSource.abstract_relation_source import AbstractRelationSource
+from Relation import Relation
 from wiki_index.wikidata_entity_relations import WikidataEntityRelations
 
 

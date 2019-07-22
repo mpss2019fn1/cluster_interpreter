@@ -1,27 +1,19 @@
 import logging
 import queue
 import threading
-from collections import Counter
+from queue import Queue
 
-from relation.relation_metrics import RelationMetrics
-from util.utils import measure
+from Cluster.cluster import Cluster
+from Relation import RelationMetrics
+from RelationSource import AbstractRelationSource
 
 
-class ClusterAnnotator(threading.Thread):
-
-    def __init__(self, thread_id, work_queue, relation_source, output_directory, wikipedia_wikidata_mapping,
-                 relation_sink):
-        threading.Thread.__init__(self)
-
-        self._thread_id = thread_id
-        self._work_queue = work_queue
-
-        self._cluster_annotations = {"relation": Counter()}
-
-        self._relation_source = relation_source
-        self._output_directory = output_directory
-        self._wikipedia_wikidata_mapping = wikipedia_wikidata_mapping
-        self._relation_sink = relation_sink
+class ClusterWorker(threading.Thread):
+    
+    def __init__(self, id_: int, working_queue: Queue[Cluster], relation_source: AbstractRelationSource):
+        super(ClusterWorker, self).__init__(name=str(id_))
+        self._working_queue: Queue[Cluster] = working_queue
+        self._relation_source: AbstractRelationSource = relation_source
 
     def run(self):
         while self._analyze_cluster():
@@ -29,18 +21,14 @@ class ClusterAnnotator(threading.Thread):
 
     def _analyze_cluster(self):
         try:
-            cluster = self._work_queue.get_nowait()
+            cluster: Cluster = self._working_queue.get_nowait()
             logging.info(f"Start analyzing cluster #{cluster.id}")
-            measure(f"Fetching wikidata ids for cluster #{cluster.id} ({len(cluster.entities)} entities)",
-                    cluster.fetch_wikidata_ids,
-                    self._wikipedia_wikidata_mapping)
-            measure(f"Analyzing cluster #{cluster.id} ({len(cluster.entities)} entities)", self._analyze_entities,
-                    cluster)
+            self._analyze_entities(cluster)
             return True
         except queue.Empty:
             return False
 
-    def _analyze_entities(self, cluster):
+    def _analyze_entities(self, cluster: Cluster):
         index = 0
         metrics = RelationMetrics(len(cluster.entities))
 
@@ -55,7 +43,7 @@ class ClusterAnnotator(threading.Thread):
                 # request succeeded
                 index += len(chunk)
 
-            ClusterAnnotator._count_relations(relations, metrics)
+            ClusterWorker._count_relations(relations, metrics)
             self._relation_sink.persist(relations)
 
         self._print_relations(cluster, metrics)
@@ -65,7 +53,7 @@ class ClusterAnnotator(threading.Thread):
         for relation in relations:
             metrics.add_relation(relation)
 
-    def _print_relations(self, cluster, cluster_metrics):
+    def _print_relations(self, cluster: Cluster, cluster_metrics):
         with open(f"{self._output_directory}/enriched_cluster_{cluster.id}.txt", "w+") as output_file:
             print(f"\n== TOP RELATIONS FOR #{cluster.id} {cluster.name} ({len(cluster.entities)} Entities) ==",
                   file=output_file)
