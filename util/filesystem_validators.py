@@ -1,30 +1,30 @@
 import argparse
 import os
+from pathlib import Path
+from typing import Optional
 
 
-class AccessibleTextFile(argparse.Action):
+class ReadableFile(argparse.Action):
 
-    def __call__(self, parser, parser_namespace, values, option_string=None):
-        path = os.path.abspath(os.path.expanduser(values))
+    def __call__(self, parser: argparse.ArgumentParser, parser_namespace: object, values: Path,
+                 option_string: Optional[str] = None) -> None:
+        if not values.is_file():
+            raise argparse.ArgumentError(self, "{0} is not a valid file".format(values.absolute()))
 
-        if not os.path.isfile(path):
-            raise argparse.ArgumentError(self, "{0} is not a valid file".format(path))
+        if not os.access(str(values.absolute()), os.R_OK):
+            raise argparse.ArgumentError(self, "Permission denied to read from {0}".format(values.absolute()))
 
-        if not os.access(path, os.R_OK):
-            raise argparse.ArgumentError(self, "Permission denied to read from {0}".format(path))
-
-        setattr(parser_namespace, self.dest, path)
+        setattr(parser_namespace, self.dest, values)
 
 
-class AccessibleDirectory(argparse.Action):
+class WriteableDirectory(argparse.Action):
 
-    def __call__(self, parser, parser_namespace, values, option_string=None):
-        path = os.path.abspath(os.path.expanduser(values))
+    def __call__(self, parser: argparse.ArgumentParser, parser_namespace: object, values: Path,
+                 option_string: Optional[str] = None) -> None:
+        if not values.is_dir():
+            raise argparse.ArgumentError(self, "{0} is not a valid directory".format(values.absolute()))
 
-        if not os.path.isdir(path):
-            raise argparse.ArgumentError(self, "{0} is not a valid directory".format(path))
+        if not os.access(str(values.absolute()), os.W_OK):
+            raise argparse.ArgumentError(self, "Permission denied to write to {0}".format(values.absolute()))
 
-        if not os.access(path, os.R_OK):
-            raise argparse.ArgumentError(self, "Permission denied to read from {0}".format(path))
-
-        setattr(parser_namespace, self.dest, path)
+        setattr(parser_namespace, self.dest, values)
