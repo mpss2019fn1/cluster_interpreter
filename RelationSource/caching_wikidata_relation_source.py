@@ -13,7 +13,6 @@ from wikidata_endpoint import WikidataEndpoint, WikidataRequestExecutor
 
 
 class CachingWikidataRelationSource(AbstractRelationSource):
-
     DEFAULT_CHUNK_SIZE = 500
 
     def __init__(self, linkings: EntityLinkings, wikidata_endpoint: WikidataEndpoint):
@@ -84,7 +83,8 @@ class CachingWikidataRelationSource(AbstractRelationSource):
     __succeeded_requests: int = 0
     __cache_lock: threading.Lock = threading.Lock()
     __cached_relations: Optional[Dict[str, List[Relation]]] = None
-    __cache_modified: bool = False
+    __new_cached_relations: List[Relation] = []
+    __caching_file_lock: threading.Lock = threading.Lock()
     __cache_file: Path = Path(os.path.dirname(os.path.abspath(__file__)), "..", ".cached_relations.csv")
 
     def chunk_size(self) -> int:
@@ -97,15 +97,21 @@ class CachingWikidataRelationSource(AbstractRelationSource):
 
     @staticmethod
     def _retrieve_relations_from_cache(entities: List[str]) -> Iterable[Relation]:
+        cached_relations: Optional[Generator[List[Relation]]] = None
+
         with CachingWikidataRelationSource.__cache_lock:
             CachingWikidataRelationSource.__initialize_cache()
 
             cached_entities: Iterator[str] = filter(lambda x: x in CachingWikidataRelationSource.__cached_relations,
                                                     entities)
-            cached_relations: Generator[List[Relation]] = (CachingWikidataRelationSource.__cached_relations[entity] for
-                                                           entity in cached_entities)
-            for list_of_relations in cached_relations:
-                yield from list_of_relations
+            cached_relations = (CachingWikidataRelationSource.__cached_relations[entity] for
+                                entity in cached_entities)
+
+        if cached_relations is None:
+            raise StopIteration
+
+        for list_of_relations in cached_relations:
+            yield from list_of_relations
 
     @staticmethod
     def _add_to_cache(relations: Iterable[Relation]) -> None:
@@ -117,7 +123,9 @@ class CachingWikidataRelationSource(AbstractRelationSource):
                     CachingWikidataRelationSource.__cached_relations[relation.source] = []
 
                 CachingWikidataRelationSource.__cached_relations[relation.source].append(relation)
-                CachingWikidataRelationSource.__cache_modified = True
+                CachingWikidataRelationSource.__new_cached_relations.append(relation)
+
+        CachingWikidataRelationSource._save_cached_relations()
 
     @staticmethod
     def __initialize_cache() -> None:
@@ -152,16 +160,19 @@ class CachingWikidataRelationSource(AbstractRelationSource):
 
     @staticmethod
     def _save_cached_relations() -> None:
+        new_relations: List[Relation] = []
         with CachingWikidataRelationSource.__cache_lock:
-            if not CachingWikidataRelationSource.__cache_modified:
-                return
+            new_relations.extend(CachingWikidataRelationSource.__new_cached_relations)
+            CachingWikidataRelationSource.__new_cached_relations.clear()
 
-            with CachingWikidataRelationSource.__cache_file.open("w+") as output_stream:
-                print("source,name,target", file=output_stream)
+        if len(new_relations) < 1:
+            return
 
-                for relation_source, relations in CachingWikidataRelationSource.__cached_relations.items():
-                    for relation in relations:
-                        print(f"{relation.source},{relation.name},{relation.target}", file=output_stream)
+        with CachingWikidataRelationSource.__caching_file_lock:
+            if not CachingWikidataRelationSource.__cache_file.exists():
+                with CachingWikidataRelationSource.__cache_file.open("w+") as output_stream:
+                    print("source,name,target", file=output_stream)
 
-    def shutdown(self) -> None:
-        CachingWikidataRelationSource._save_cached_relations()
+            with CachingWikidataRelationSource.__cache_file.open("a") as output_stream:
+                for relation in new_relations:
+                    print(f"{relation.source},{relation.name},{relation.target}", file=output_stream)

@@ -54,9 +54,6 @@ class ClusterAnnotator:
         for worker in self._workers:
             worker.join()
 
-        for relation_source in self._relation_sources:
-            relation_source.shutdown()
-
         return self._collect_results()
 
     def _collect_results(self) -> Iterable[RelationMetrics]:
