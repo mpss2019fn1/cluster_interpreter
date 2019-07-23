@@ -1,5 +1,5 @@
 import re
-from typing import Match
+from typing import Match, List, Dict
 
 from resources import constant
 
@@ -14,15 +14,15 @@ class Relation:
         self.target: str = target
 
     @staticmethod
-    def from_wikidata_record(record) -> "Relation":
+    def from_wikidata_record(record: Dict[str, str]) -> "Relation":
         match: Match = Relation.ID_EXTRACTION_REGEX.match(record[constant.RELATION_SOURCE_LABEL])
         if not match:
             raise ValueError("record does not contain a wikidata id")
 
-        return Relation(match.group(0),
+        return Relation(match.group(1),
                         record[constant.RELATION_NAME_LABEL],
                         record[constant.RELATION_TARGET_LABEL])
 
     @staticmethod
-    def from_csv_record(record) -> "Relation":
-        return Relation(f"https://www.wikidata.org/wiki/{record['source']}", record["name"], record["value"])
+    def from_csv_record(record: List[str]) -> "Relation":
+        return Relation(record[0], record[1], record[2])

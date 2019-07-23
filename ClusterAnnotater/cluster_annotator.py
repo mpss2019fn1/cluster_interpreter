@@ -13,14 +13,14 @@ from wikidata_endpoint import WikidataEndpoint, WikidataEndpointConfiguration
 
 
 class ClusterAnnotator:
-
     DEFAULT_CONFIG_WIKIDATA_ENDPOINT = Path(os.path.dirname(os.path.abspath(__file__)), "..", "resources",
                                             "wikidata_endpoint_config.ini")
 
     def __init__(self, linkings: EntityLinkings, clusters: Iterable[Cluster], workers: int):
         self._linkings: EntityLinkings = linkings
         self._clusters: Iterable[Cluster] = clusters
-        self._relation_source: AbstractRelationSource = self._create_caching_relation_source()
+        self._wikidata_endpoint = ClusterAnnotator._create_wikidata_endpoint()
+        self._relation_sources: List[AbstractRelationSource] = []
         self._working_queue: queue.Queue[Cluster] = queue.Queue()
         self._workers: List[ClusterWorker] = []
         self._annotated_clusters: Dict[Cluster, RelationMetrics] = {}
@@ -28,11 +28,11 @@ class ClusterAnnotator:
         self._fill_working_queue()
         self._create_workers(workers)
 
-    def _create_caching_relation_source(self) -> CachingWikidataRelationSource:
+    @staticmethod
+    def _create_wikidata_endpoint() -> WikidataEndpoint:
         config: WikidataEndpointConfiguration = WikidataEndpointConfiguration(
             ClusterAnnotator.DEFAULT_CONFIG_WIKIDATA_ENDPOINT)
-        wikidata_endpoint: WikidataEndpoint = WikidataEndpoint(config)
-        return CachingWikidataRelationSource(self._linkings, wikidata_endpoint, True)
+        return WikidataEndpoint(config)
 
     def _fill_working_queue(self) -> None:
         for cluster in self._clusters:
@@ -40,7 +40,12 @@ class ClusterAnnotator:
 
     def _create_workers(self, workers: int) -> None:
         for i in range(workers):
-            self._workers.append(ClusterWorker(i, self._working_queue, self._relation_source))
+            self._workers.append(ClusterWorker(i, self._working_queue, self._create_relation_source()))
+
+    def _create_relation_source(self) -> AbstractRelationSource:
+        source: CachingWikidataRelationSource = CachingWikidataRelationSource(self._linkings, self._wikidata_endpoint)
+        self._relation_sources.append(source)
+        return source
 
     def run(self) -> Iterable[RelationMetrics]:
         for worker in self._workers:
@@ -49,10 +54,11 @@ class ClusterAnnotator:
         for worker in self._workers:
             worker.join()
 
-        self._relation_source.shutdown()
+        for relation_source in self._relation_sources:
+            relation_source.shutdown()
+
         return self._collect_results()
 
     def _collect_results(self) -> Iterable[RelationMetrics]:
         for worker in self._workers:
-            yield worker.result
-
+            yield from worker.result
