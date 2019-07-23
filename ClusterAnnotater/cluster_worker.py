@@ -1,25 +1,26 @@
 import logging
 import queue
 import threading
-from queue import Queue
+from typing import List
 
 from Cluster.cluster import Cluster
 from Relation import RelationMetrics
-from RelationSource import AbstractRelationSource
+from RelationSource.abstract_relation_source import AbstractRelationSource
 
 
 class ClusterWorker(threading.Thread):
-    
-    def __init__(self, id_: int, working_queue: Queue[Cluster], relation_source: AbstractRelationSource):
-        super(ClusterWorker, self).__init__(name=str(id_))
-        self._working_queue: Queue[Cluster] = working_queue
-        self._relation_source: AbstractRelationSource = relation_source
 
-    def run(self):
+    def __init__(self, id_: int, working_queue: queue.Queue, relation_source: AbstractRelationSource):
+        super(ClusterWorker, self).__init__(name=str(id_))
+        self._working_queue: queue.Queue = working_queue
+        self._relation_source: AbstractRelationSource = relation_source
+        self._results: List[RelationMetrics] = []
+
+    def run(self) -> None:
         while self._analyze_cluster():
             pass
 
-    def _analyze_cluster(self):
+    def _analyze_cluster(self) -> bool:
         try:
             cluster: Cluster = self._working_queue.get_nowait()
             logging.info(f"Start analyzing cluster #{cluster.id}")
@@ -28,9 +29,9 @@ class ClusterWorker(threading.Thread):
         except queue.Empty:
             return False
 
-    def _analyze_entities(self, cluster: Cluster):
+    def _analyze_entities(self, cluster: Cluster) -> None:
         index = 0
-        metrics = RelationMetrics(len(cluster.entities))
+        metrics = RelationMetrics(cluster)
 
         while index < len(cluster.entities):
             self._chunk_size = min(len(cluster.entities), self._relation_source.chunk_size())
@@ -43,18 +44,10 @@ class ClusterWorker(threading.Thread):
                 # request succeeded
                 index += len(chunk)
 
-            ClusterWorker._count_relations(relations, metrics)
-            self._relation_sink.persist(relations)
+            map(metrics.add_relation, relations)
 
-        self._print_relations(cluster, metrics)
+        self._results.append(metrics)
 
-    @staticmethod
-    def _count_relations(relations, metrics):
-        for relation in relations:
-            metrics.add_relation(relation)
-
-    def _print_relations(self, cluster: Cluster, cluster_metrics):
-        with open(f"{self._output_directory}/enriched_cluster_{cluster.id}.txt", "w+") as output_file:
-            print(f"\n== TOP RELATIONS FOR #{cluster.id} {cluster.name} ({len(cluster.entities)} Entities) ==",
-                  file=output_file)
-            print(cluster_metrics, file=output_file)
+    @property
+    def result(self) -> List[RelationMetrics]:
+        return self._results

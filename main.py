@@ -1,12 +1,15 @@
 import argparse
+import json
 import logging
 from pathlib import Path
-from typing import Iterable
+from typing import Iterable, List
 
 from Cluster.cluster import Cluster
+from ClusterAnnotater.cluster_annotator import ClusterAnnotator
 from EntityLinking.entity_linkings import EntityLinkings
 from FileParser.ClusterFileParser.cluster_file_parser import ClusterFileParser
 from FileParser.EntityLinkingFileParsing.entity_linking_file_parser import EntityLinkingFileParser
+from Relation import RelationMetrics
 from util.filesystem_validators import WriteableDirectory, ReadableFile
 
 
@@ -18,6 +21,11 @@ def main():
 
     entity_linkings: EntityLinkings = EntityLinkingFileParser.create_from_file(args.linkings)
     clusters: Iterable[Cluster] = ClusterFileParser.create_from_file(args.clusters)
+    cluster_annotator: ClusterAnnotator = ClusterAnnotator(entity_linkings, clusters, args.threads)
+
+    result: List[RelationMetrics] = list(cluster_annotator.run())
+
+    _print_relations(result, args.output)
 
 
 def _initialize_parser():
@@ -31,6 +39,14 @@ def _initialize_parser():
                                 required=True, type=Path)
     general_parser.add_argument("--threads", help='Number of threads', type=int, required=False, default=8)
     return general_parser
+
+
+def _print_relations(result: List[RelationMetrics], output_directory: Path):
+    result_as_json: List[object] = []
+    for metric in result:
+        result_as_json.append(metric.to_json_object())
+    with Path(output_directory, f"enriched_cluster").open("w+") as output_file:
+        json.dump(result_as_json, output_file)
 
 
 if __name__ == "__main__":

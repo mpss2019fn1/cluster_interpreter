@@ -7,7 +7,7 @@ from typing import List, Dict, Iterator, Generator, Any, Iterable
 
 import EntityLinking
 from Relation.relation import Relation
-from RelationSource import AbstractRelationSource
+from RelationSource.abstract_relation_source import AbstractRelationSource
 from resources import constant
 from wikidata_endpoint import WikidataEndpoint, WikidataRequestExecutor
 
@@ -26,6 +26,10 @@ class CachingWikidataRelationSource(AbstractRelationSource):
 
     def _load_cached_relations(self) -> Dict[str, List[Relation]]:
         cached_relations: Dict[str, List[Relation]] = {}
+
+        if not self.CACHE_FILE.exists():
+            return cached_relations
+
         with self.CACHE_FILE.open("r") as input_stream:
             csv_reader: csv.reader = csv.reader(input_stream)
             next(csv_reader)  # skip header line
