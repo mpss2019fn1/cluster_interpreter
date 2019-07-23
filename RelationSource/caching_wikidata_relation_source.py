@@ -3,9 +3,9 @@ import logging
 import os
 import threading
 from pathlib import Path
-from typing import List, Dict, Iterator, Generator, Any, Iterable
+from typing import List, Dict, Iterator, Generator, Any
 
-import EntityLinking
+from EntityLinking.entity_linkings import EntityLinkings
 from Relation.relation import Relation
 from RelationSource.abstract_relation_source import AbstractRelationSource
 from resources import constant
@@ -14,11 +14,11 @@ from wikidata_endpoint import WikidataEndpoint, WikidataRequestExecutor
 
 class CachingWikidataRelationSource(AbstractRelationSource):
 
-    DEFAULT_CHUNK_SIZE = 1000
+    DEFAULT_CHUNK_SIZE = 500
     CACHE_FILE = Path(os.path.dirname(os.path.abspath(__file__)), "..", ".cached_relations.csv")
 
-    def __init__(self, entity_linking: EntityLinking, wikidata_endpoint: WikidataEndpoint, cache_enabled: bool = True):
-        self._linking: EntityLinking = entity_linking
+    def __init__(self, linkings: EntityLinkings, wikidata_endpoint: WikidataEndpoint, cache_enabled: bool = True):
+        self._linkings: EntityLinkings = linkings
         self._cache_enabled: bool = cache_enabled
         self._cached_relations: Dict[str, List[Relation]] = self._load_cached_relations()
         self._wikidata_endpoint: WikidataEndpoint = wikidata_endpoint
@@ -32,17 +32,21 @@ class CachingWikidataRelationSource(AbstractRelationSource):
 
         with self.CACHE_FILE.open("r") as input_stream:
             csv_reader: csv.reader = csv.reader(input_stream)
-            next(csv_reader)  # skip header line
+            header_row: bool = True
 
             for row in csv_reader:
+                if header_row:
+                    header_row = False
+                    continue
+
                 if not row:
                     continue  # ignore blank lines
 
-            relation: Relation = Relation.from_csv_record(row)
-            if relation.source not in cached_relations:
-                cached_relations[relation.source] = []
+                relation: Relation = Relation.from_csv_record(row)
+                if relation.source not in cached_relations:
+                    cached_relations[relation.source] = []
 
-            cached_relations[relation.source].append(relation)
+                cached_relations[relation.source].append(relation)
 
         return cached_relations
 
@@ -54,10 +58,11 @@ class CachingWikidataRelationSource(AbstractRelationSource):
                 relations: List[Relation] = self._cached_relations[relation_source]
 
                 for relation in relations:
-                    print(f"{relation.source},{relation.name},{relation.value}", file=output_stream)
+                    print(f"{relation.source},{relation.name},{relation.target}", file=output_stream)
 
-    def fetch(self, embedding_tags: Iterable[str]) -> List[Relation]:
-        entities: List[str] = [self._linking[tag] for tag in embedding_tags]
+    def _retrieve_relations_for(self, embedding_tags: List[str]) -> List[Relation]:
+        self._chunk_size = len(embedding_tags)
+        entities: List[str] = [self._linkings[tag] for tag in embedding_tags]
         relations: List[Relation] = []
         if self._cache_enabled:
             cached_entities: Iterator[str] = filter(lambda x: x in self._cached_relations, entities)
@@ -65,11 +70,12 @@ class CachingWikidataRelationSource(AbstractRelationSource):
             relations.extend([relation for relations in cached_relations for relation in relations])  # list flatting
             entities = list(set(entities) - set(cached_entities))
 
-        result: List[Relation] = self._retrieve_relations_for(entities)
-        self._update_cache(result)
+        remote_relations: List[Relation] = self._retrieve_relations_from_remote(entities)
+        self._update_cache(remote_relations)
+        relations.extend(remote_relations)
         return relations
 
-    def _retrieve_relations_for(self, entities: List[str]) -> List[Relation]:
+    def _retrieve_relations_from_remote(self, entities: List[str]) -> List[Relation]:
         query = constant.named_entity_relations_sparql_query(entities)
 
         with self._wikidata_endpoint.request() as request:
@@ -132,5 +138,5 @@ class CachingWikidataRelationSource(AbstractRelationSource):
         with CachingWikidataRelationSource.__chunk_size_lock:
             return CachingWikidataRelationSource.__chunk_size
 
-    def __del__(self) -> None:
+    def shutdown(self):
         self._save_cached_relations()

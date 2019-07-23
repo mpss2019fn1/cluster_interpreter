@@ -12,7 +12,7 @@ class EntityLinkingFileParser(AbstractFileParser):
     def create_from_file(configuration_file):
         with open(configuration_file, 'r') as csv_stream:
             csv_reader = csv.reader(csv_stream, delimiter=',')
-            entity_mappings = EntityLinkings()
+            linkings = EntityLinkings()
 
             next(csv_reader, None)  # skip header
             for row in csv_reader:
@@ -21,6 +21,6 @@ class EntityLinkingFileParser(AbstractFileParser):
 
                 knowledgebase_id = row[EntityLinkingFileParser.COLUMN_INDEX_KNOWLEDGEBASE_ID]
                 embedding_tag = row[EntityLinkingFileParser.COLUMN_INDEX_EMBEDDING_LABEL]
-                entity_mappings.add(knowledgebase_id, embedding_tag)
+                linkings.add(embedding_tag, knowledgebase_id)
 
-            return entity_mappings
+            return linkings

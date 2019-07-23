@@ -6,7 +6,7 @@ from typing import Iterable, List, Dict
 from Cluster.cluster import Cluster
 from ClusterAnnotater.cluster_worker import ClusterWorker
 from EntityLinking.entity_linkings import EntityLinkings
-from Relation import RelationMetrics
+from Relation.relation_metrics import RelationMetrics
 from RelationSource.abstract_relation_source import AbstractRelationSource
 from RelationSource.caching_wikidata_relation_source import CachingWikidataRelationSource
 from wikidata_endpoint import WikidataEndpoint, WikidataEndpointConfiguration
@@ -35,7 +35,8 @@ class ClusterAnnotator:
         return CachingWikidataRelationSource(self._linkings, wikidata_endpoint, True)
 
     def _fill_working_queue(self) -> None:
-        map(self._working_queue.put, self._clusters)
+        for cluster in self._clusters:
+            self._working_queue.put_nowait(cluster)
 
     def _create_workers(self, workers: int) -> None:
         for i in range(workers):
@@ -43,11 +44,12 @@ class ClusterAnnotator:
 
     def run(self) -> Iterable[RelationMetrics]:
         for worker in self._workers:
-            worker.run()
+            worker.start()
 
         for worker in self._workers:
             worker.join()
 
+        self._relation_source.shutdown()
         return self._collect_results()
 
     def _collect_results(self) -> Iterable[RelationMetrics]:

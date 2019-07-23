@@ -4,7 +4,7 @@ import threading
 from typing import List
 
 from Cluster.cluster import Cluster
-from Relation import RelationMetrics
+from Relation.relation_metrics import RelationMetrics
 from RelationSource.abstract_relation_source import AbstractRelationSource
 
 
@@ -37,7 +37,7 @@ class ClusterWorker(threading.Thread):
             self._chunk_size = min(len(cluster.entities), self._relation_source.chunk_size())
             chunk = cluster.entities[index:index + self._chunk_size]
 
-            logging.info(f"Getting relation for batch [{index},{index + len(chunk)}]")
+            logging.info(f"[CLUSTER-{cluster.id}] Getting relation for batch [{index},{index + len(chunk)}]")
             relations = self._relation_source.relations_for(chunk)
 
             if len(relations) > 0:

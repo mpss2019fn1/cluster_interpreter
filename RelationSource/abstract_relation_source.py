@@ -14,4 +14,8 @@ class AbstractRelationSource(ABC):
 
     @abstractmethod
     def chunk_size(self):
-        raise NotImplementedError()
+        raise NotImplementedError
+
+    @abstractmethod
+    def shutdown(self):
+        raise NotImplementedError
