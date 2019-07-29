@@ -50,7 +50,7 @@ def _print_relations(result: List[RelationMetrics], output_directory: Path):
     result_as_json: List[object] = []
     for metric in result:
         result_as_json.append(metric.to_json_object())
-    with Path(output_directory, f"enriched_cluster").open("w+") as output_file:
+    with Path(output_directory, f"enriched_cluster.json").open("w+") as output_file:
         json.dump(result_as_json, output_file)
 
 
