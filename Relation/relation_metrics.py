@@ -64,7 +64,8 @@ class RelationMetrics:
                 return {
                     "name": relation[0],
                     "absolute_occurrence": relation[1],
-                    "relative_occurrence": "{:5.2f}%".format(relation[1] / self.number_of_entities * 100)
+                    "relative_occurrence": "{:5.2f}%".format(relation[1] / self.number_of_entities * 100),
+                    "top_values": top_values
                 }
 
             top_relations: List[object] = []
