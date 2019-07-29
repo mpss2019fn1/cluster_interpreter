@@ -20,7 +20,7 @@ class RelationMetrics:
         if relation.source not in self._unique_relation_participants[relation.name]:
             self._unique_relations_counter[relation.name] += 1
             self._unique_relation_participants[relation.name].add(relation.source)
-        self._value_per_relation[relation.name][relation.value] += 1
+        self._value_per_relation[relation.name][relation.target] += 1
 
     def top_relations(self, max_relations, min_occurrence_factor=0) -> List[Tuple[str, int]]:
         return list(filter(lambda x: x[1] > self.number_of_entities * min_occurrence_factor,

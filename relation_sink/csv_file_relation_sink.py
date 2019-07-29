@@ -10,5 +10,5 @@ class CsvRelationSink(AbstractFileRelationSink):
         yield "source,name,value"
 
     def _generate_file_content(self, relations):
-        yield from (f"\"{relation.source.split('/')[-1]}\",\"{relation.name}\",\"{relation.value}\"" for relation in
+        yield from (f"\"{relation.source.split('/')[-1]}\",\"{relation.name}\",\"{relation.target}\"" for relation in
                     relations)
