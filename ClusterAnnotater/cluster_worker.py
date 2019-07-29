@@ -43,7 +43,8 @@ class ClusterWorker(threading.Thread):
             if len(relations) > 0:
                 # request succeeded
                 index += len(chunk)
-                map(metrics.add_relation, relations)
+                for relation in relations:
+                    metrics.add_relation(relation)
 
         self._results.append(metrics)
 
