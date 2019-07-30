@@ -9,6 +9,7 @@ from RelationSource.abstract_relation_source import AbstractRelationSource
 
 
 class ClusterWorker(threading.Thread):
+    MAX_NUMBER_OF_RETRIES = 3
 
     def __init__(self, id_: int, working_queue: queue.Queue, relation_source: AbstractRelationSource):
         super(ClusterWorker, self).__init__(name=str(id_))
@@ -31,6 +32,7 @@ class ClusterWorker(threading.Thread):
 
     def _analyze_entities(self, cluster: Cluster) -> None:
         index = 0
+        error_counter = 0
         metrics = RelationMetrics(cluster)
 
         while index < len(cluster.entities):
@@ -42,9 +44,18 @@ class ClusterWorker(threading.Thread):
 
             if len(relations) > 0:
                 # request succeeded
+                error_counter = 0
                 index += len(chunk)
                 for relation in relations:
                     metrics.add_relation(relation)
+
+            if len(relations) == 0:
+                # No relation has been fetched from cache AND remote source due to unsuccessful linking or remote error
+                error_counter += 1
+
+            if error_counter == ClusterWorker.MAX_NUMBER_OF_RETRIES:
+                error_counter = 0
+                index += self._chunk_size
 
         self._results.append(metrics)
 
