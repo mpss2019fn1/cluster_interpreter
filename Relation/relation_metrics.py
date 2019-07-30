@@ -22,11 +22,11 @@ class RelationMetrics:
             self._unique_relation_participants[relation.name].add(relation.source)
         self._value_per_relation[relation.name][relation.target] += 1
 
-    def top_relations(self, max_relations, min_occurrence_factor=0) -> List[Tuple[str, int]]:
+    def top_relations(self, max_relations, min_occurrence_factor=0.3) -> List[Tuple[str, int]]:
         return list(filter(lambda x: x[1] > self.number_of_entities * min_occurrence_factor,
                            self._unique_relations_counter.most_common(max_relations)))
 
-    def top_values(self, relation_name, max_values, min_occurrence_factor=0) -> List[Tuple[str, int]]:
+    def top_values(self, relation_name, max_values, min_occurrence_factor=0.1) -> List[Tuple[str, int]]:
         return list(filter(lambda x: x[1] > self.number_of_entities * min_occurrence_factor,
                            self._value_per_relation[relation_name].most_common(max_values)))
 
